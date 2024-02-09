@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:os="http://www.mulesoft.org/schema/mule/os" xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/os http://www.mulesoft.org/schema/mule/os/current/mule-os.xsd">
+	<os:object-store name="Object_store" doc:name="Object store" doc:id="ff8c377d-9226-4215-9e79-a98b073fe472" />
+	<flow name="implementationFlow" doc:id="65cce097-1b0d-4e35-b060-6fdd712ddcbd" >
+		<http:listener doc:name="Listener" doc:id="b584a19a-e636-45b5-9117-132499ba8721" path="/employee" config-ref="HTTP_Listener_config"/>
+		<flow-ref doc:name="Flow Reference" doc:id="61424744-9cc1-418c-8d9a-31ca5a74bc89" name="xyz-employee-prc-apiFlow"/>
+	</flow>
+	<flow name="xyz-employee-prc-apiFlow" doc:id="5f37b3cd-80f0-4a31-b35b-2e926f4f9e79" >
+		<scheduler doc:name="Scheduler" doc:id="db97f315-a583-4ca1-87f7-9183a77f56f7" >
+			<scheduling-strategy >
+				<fixed-frequency frequency="1" timeUnit="DAYS"/>
+			</scheduling-strategy>
+		</scheduler>
+		<os:retrieve doc:name="retrieves the stored object store datetime " doc:id="eabd3b5f-e35a-4adb-aa73-8740810dd1e7" key="latestdatetime" target="lastdatetime">
+			<os:default-value ><![CDATA[#['1999-01-01T09:00:00']]]></os:default-value>
+		</os:retrieve>
+		<flow-ref doc:name="Call OIM flow to extract data" doc:id="331bed02-dfda-42dc-9515-8027da295124" name="OIMcall"/>
+		<ee:transform doc:name="Transform Message" doc:id="b16638d4-bbf4-411a-93a0-e1455bf34a70" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+
+var inputrequest = payload filter ($.lastdatetime > vars.lastdatetime)
+---
+
+inputrequest
+
+
+]]></ee:set-payload>
+			</ee:message>
+			<ee:variables >
+				<ee:set-variable variableName="modifieddate" ><![CDATA[%dw 2.0
+output application/json
+
+var maxdatetime = payload maxBy ($.lastdatetime as DateTime)
+---
+maxdatetime.lastdatetime]]></ee:set-variable>
+			</ee:variables>
+		</ee:transform>
+		<choice doc:name="Choice" doc:id="d8d572de-170a-4548-a2e2-ba4efe92d2d4" >
+			<when expression="#[not isEmpty(payload)]">
+				<http:request method="POST" doc:name="Request" doc:id="410e99fb-2404-41c2-9522-a3399f10ccdd" path="${sf.path}" config-ref="HTTP_Request_sf_configuration"/>
+				<os:store doc:name="Store" doc:id="dee1df4e-5d62-4263-b99f-708f3ac09648" key="latestdatetime" objectStore="Object_store">
+			<os:value><![CDATA[#[vars.modifieddate default now()]]]></os:value>
+		</os:store>
+				<logger level="INFO" doc:name="Logger" doc:id="b897cfc2-519c-4116-98a7-f5e1d78d2502" />
+			</when>
+			<otherwise >
+				<logger level="INFO" doc:name="Logger" doc:id="af975a22-f88f-4f24-93a5-c9dc06590b83" message="No New Records Available"/>
+			</otherwise>
+		</choice>
+		<error-handler >
+			<on-error-propagate enableNotifications="true" logException="true" doc:name="On Error Propagate" doc:id="d9a2e58d-18c5-4d93-b91b-b88af8155559" type="HTTP:BAD_REQUEST, HTTP:NOT_FOUND, HTTP:TIMEOUT">
+				<logger level="INFO" doc:name="Logger" doc:id="5b2f7a77-0f9a-4569-8aea-90566bd42ee2" message="Error occured on Employee Process #[error.errorMessage]"/>
+			</on-error-propagate>
+		</error-handler>
+	</flow>
+	<sub-flow name="OIMcall" doc:id="121321f8-f7c8-4a8b-898a-815858951d8b" >
+		<http:request method="GET" doc:name="Get all employees data from the OIM DB" doc:id="8ec43db9-2925-4924-9ec1-31e1d425e506" config-ref="HTTP_Request_db_configuration" path="${db.path}"/>
+		<logger level="INFO" doc:name="Log the final payload from DB" doc:id="326e8d76-1c68-466e-9735-7dc229c3f1df" message="#[payload]"/>
+	</sub-flow>
+</mule>

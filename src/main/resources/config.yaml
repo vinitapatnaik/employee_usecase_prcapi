@@ -1,0 +1,15 @@
+http:
+  host: "localhost"
+  port: "8086"
+  path: "/employee" 
+sf:
+  host: "localhost"
+  port: "8082"
+  path: "/sf" 
+db:
+  host: "localhost"
+  port: "8081" 
+  path: "/db" 
+
+ 
+  
